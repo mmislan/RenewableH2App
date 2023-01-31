@@ -21,47 +21,30 @@ city_temperature = pd.read_sql_query("SELECT * FROM temperature", conn)
 city_humidity = pd.read_sql_query("SELECT * FROM humidity", conn)
 
 windspeed_byYear = city_windspeed.groupby(city_windspeed.Year)
-windspeed2013 = windspeed_byYear.get_group(2013)
-windspeed2014 = windspeed_byYear.get_group(2014)
-windspeed2015 = windspeed_byYear.get_group(2015)
-windspeed2016 = windspeed_byYear.get_group(2016)
 # Convert to numpy for more customizable matplotlib + function calls
-#Please note that I know I could've made these 3D numpy arrays [8760, 34, 4]
-#But 2016 is a leap year, requiring more conditions below
-Windspeed2013 = windspeed2013.to_numpy()
-Windspeed2014 = windspeed2014.to_numpy()
-Windspeed2015 = windspeed2015.to_numpy()
-Windspeed2016 = windspeed2016.to_numpy()
-Windpower2013 = np.zeros(Windspeed2013.shape[0])
-Windpower2014 = np.zeros(Windspeed2014.shape[0])
-Windpower2015 = np.zeros(Windspeed2015.shape[0])
-Windpower2016 = np.zeros(Windspeed2016.shape[0])
-WindH22013 = np.zeros(Windspeed2013.shape[0])
-WindH22014 = np.zeros(Windspeed2014.shape[0])
-WindH22015 = np.zeros(Windspeed2015.shape[0])
-WindH22016 = np.zeros(Windspeed2016.shape[0])
-WindH2Avg = np.zeros(Windspeed2016.shape[0])
-WindH2StdDev = np.zeros(Windspeed2016.shape[0])
-Solarpower2013 = np.zeros(Windspeed2013.shape[0])
-Solarpower2014 = np.zeros(Windspeed2014.shape[0])
-Solarpower2015 = np.zeros(Windspeed2015.shape[0])
-Solarpower2016 = np.zeros(Windspeed2016.shape[0])
-SolarH22013 = np.zeros(Windspeed2013.shape[0])
-SolarH22014 = np.zeros(Windspeed2014.shape[0])
-SolarH22015 = np.zeros(Windspeed2015.shape[0])
-SolarH22016 = np.zeros(Windspeed2016.shape[0])
-SolarH2Avg = np.zeros(Windspeed2016.shape[0])
-SolarH2StdDev = np.zeros(Windspeed2016.shape[0])
+WindspeedData = np.zeros([8784, 34, 4]) #First index is hours/leap year, Middle index is 4 datetime columns + 30 cities, Last index is year 0 = 2013, etc
+WindspeedData[:8760,:, 0] = windspeed_byYear.get_group(2013).to_numpy()
+WindspeedData[:8760,:, 1] = windspeed_byYear.get_group(2014).to_numpy()
+WindspeedData[:8760,:, 2] = windspeed_byYear.get_group(2015).to_numpy()
+WindspeedData[:,:, 3] = windspeed_byYear.get_group(2016).to_numpy()
+Windpower = np.zeros([WindspeedData.shape[0], 4])
+WindH2 = np.zeros([WindspeedData.shape[0], 4])
+WindH2Avg = np.zeros(WindspeedData.shape[0])
+WindH2StdDev = np.zeros(WindspeedData.shape[0])
+Solarpower = np.zeros([WindspeedData.shape[0], 4])
+SolarH2 = np.zeros([WindspeedData.shape[0], 4])
+SolarH2Avg = np.zeros(WindspeedData.shape[0])
+SolarH2StdDev = np.zeros(WindspeedData.shape[0])
 SolarIrradianceSolstice = np.zeros(24) #This container is used to generate the daily solar trend graph
 SolarIrradianceWithWeather = np.zeros(24) #This includes Kirmani 2015 Weather correction correlation
 temperature_byYear = city_windspeed.groupby(city_temperature.Year)
-TemperatureData = np.zeros([Windspeed2016.shape[0], 34, 4]) #Middle index is 4 datetime columns + 30 cities, Last index is year 0 = 2013, etc
+TemperatureData = np.zeros([WindspeedData.shape[0], 34, 4]) #Middle index is 4 datetime columns + 30 cities, Last index is year 0 = 2013, etc
 TemperatureData[:8760,:, 0] = temperature_byYear.get_group(2013).to_numpy()
 TemperatureData[:8760,:, 1] = temperature_byYear.get_group(2014).to_numpy()
 TemperatureData[:8760,:, 2] = temperature_byYear.get_group(2015).to_numpy()
 TemperatureData[:,:, 3] = temperature_byYear.get_group(2016).to_numpy()
 humidity_byYear = city_windspeed.groupby(city_humidity.Year)
-HumidityData = np.zeros([Windspeed2016.shape[0], 34, 4])
+HumidityData = np.zeros([WindspeedData.shape[0], 34, 4])
 HumidityData[:8760,:, 0] = humidity_byYear.get_group(2013).to_numpy()
 HumidityData[:8760,:, 1] = humidity_byYear.get_group(2014).to_numpy()
 HumidityData[:8760,:, 2] = humidity_byYear.get_group(2015).to_numpy()
@@ -318,19 +301,23 @@ class App:
 
         cityName = city_latlong.iat[cityNum, 0]
 
-        for i in range(1, Windspeed2016.shape[0]):  # Perform calculations for Windpower and H2 evolution
-            if i < Windspeed2013.shape[0]:  # 2016 is a leap year so need to check if loop has extended past end of other arrays
-                Windpower2013[i] = Windpower2013[i - 1] + P_wind(radius, height, Windspeed2013[i, (cityNum + 4)]) / 1000000  # Convert to MWh
-                Windpower2014[i] = Windpower2014[i - 1] + P_wind(radius, height,Windspeed2014[i, (cityNum + 4)]) / 1000000
-                Windpower2015[i] = Windpower2015[i - 1] + P_wind(radius, height,Windspeed2015[i, (cityNum + 4)]) / 1000000
-                WindH22013[i] = WindH22013[i - 1] + H2Prod((Windpower2013[i] - Windpower2013[i - 1]))  # ton/hr H2 production by Electrolysis
-                WindH22014[i] = WindH22014[i - 1] + H2Prod((Windpower2014[i] - Windpower2014[i - 1]))
-                WindH22015[i] = WindH22015[i - 1] + H2Prod((Windpower2015[i] - Windpower2015[i - 1]))
-            Windpower2016[i] = Windpower2016[i - 1] + P_wind(radius, height, Windspeed2016[i, (cityNum + 4)]) / 1000000
-            WindH22016[i] = WindH22016[i - 1] + H2Prod((Windpower2016[i] - Windpower2016[i - 1]))
-            if i < Windspeed2013.shape[0]:
-                WindH2Avg[i] = (WindH22013[i] + WindH22014[i] + WindH22015[i] + WindH22016[i]) / 4
-                WindH2StdDev[i] = np.sqrt(((WindH22013[i]-WindH2Avg[i])**2 + (WindH22014[i]-WindH2Avg[i])**2 + (WindH22015[i]-WindH2Avg[i])**2 + (WindH22016[i]-WindH2Avg[i])**2) /4)
+        for i in range(1, WindspeedData.shape[0]):  # Perform calculations for Windpower and H2 evolution
+            if i < 8760:  # 2016 is a leap year so need to check if loop has extended past end of other arrays
+                Windpower[i,0] = Windpower[i - 1,0] + P_wind(radius, height, WindspeedData[i, (cityNum + 4),0]) / 1000000  # Convert to MWh
+                Windpower[i,1] = Windpower[i - 1,1] + P_wind(radius, height,WindspeedData[i, (cityNum + 4),1]) / 1000000
+                Windpower[i,2] = Windpower[i - 1,2] + P_wind(radius, height,WindspeedData[i, (cityNum + 4),2]) / 1000000
+                WindH2[i,0] = WindH2[i - 1,0] + H2Prod((Windpower[i,0] - Windpower[i-1,0]))  # ton/hr H2 production by Electrolysis
+                WindH2[i,1] = WindH2[i - 1,1] + H2Prod((Windpower[i,1] - Windpower[i - 1,1]))
+                WindH2[i,2] = WindH2[i - 1,2] + H2Prod((Windpower[i,2] - Windpower[i - 1,2]))
+            else: #Need to pass non leapyear values forward to avoid graph dropping to zero
+                Windpower[i, 0] = Windpower[i-1,0]
+                Windpower[i, 1] = Windpower[i - 1, 1]
+                Windpower[i, 2] = Windpower[i - 1, 2]
+            Windpower[i,3] = Windpower[i - 1,3] + P_wind(radius, height, WindspeedData[i, (cityNum + 4),3]) / 1000000
+            WindH2[i,3] = WindH2[i - 1,3] + H2Prod((Windpower[i,3] - Windpower[i - 1,3]))
+            if i < 8760:
+                WindH2Avg[i] = (WindH2[i,0] + WindH2[i,1] + WindH2[i,2] + WindH2[i,3]) / 4
+                WindH2StdDev[i] = np.sqrt(((WindH2[i,0]-WindH2Avg[i])**2 + (WindH2[i,1]-WindH2Avg[i])**2 + (WindH2[i,2]-WindH2Avg[i])**2 + (WindH2[i,3]-WindH2Avg[i])**2) /4)
             else:
                 WindH2Avg[i] = WindH2Avg[i - 1]  # Continue the last leap day
                 WindH2StdDev[i] = WindH2StdDev[i-1]
@@ -373,10 +360,10 @@ class App:
         plt.subplots_adjust(top=0.9, wspace = 0.2, hspace=0.25, left = 0.075, bottom = 0.1, right = 0.95) #This helps separate subplots from supertitle
         plt.subplot(221)
         plt.title('Raw Time Series - Wind Velocity', color='white')
-        ax[0, 0].plot(Windspeed2013[:, (cityNum + 4)], 'o', color='#2CBDFE', label='2013')
-        ax[0, 0].plot(Windspeed2014[:, (cityNum + 4)], 'H', color='#5986E4', label='2014')
-        ax[0, 0].plot(Windspeed2015[:, (cityNum + 4)], 'h', color='#8D46C7', label='2015')
-        ax[0, 0].plot(Windspeed2016[:, (cityNum + 4)], '.', color='#B317B1', label='2016')
+        ax[0, 0].plot(WindspeedData[:, (cityNum + 4),0], 'o', color='#2CBDFE', label='2013')
+        ax[0, 0].plot(WindspeedData[:, (cityNum + 4),1], 'H', color='#5986E4', label='2014')
+        ax[0, 0].plot(WindspeedData[:, (cityNum + 4),2], 'h', color='#8D46C7', label='2015')
+        ax[0, 0].plot(WindspeedData[:, (cityNum + 4),3], '.', color='#B317B1', label='2016')
         ax[0, 0].set_xlabel("Hours in Year", color='white')
         ax[0, 0].set_ylabel("Wind Velocity (m/s)", color='white')
         ax[0, 0].grid(color='white', alpha=0.4, linestyle='--')
@@ -387,8 +374,8 @@ class App:
         plt.subplot(222)  # Violin plot showing Wind speed distribution per year
         plt.title('Wind Speed Distributions', color='white')
         xpos = [2013, 2014, 2015, 2016]  # X-axis positions
-        ViolinDataCol = [Windspeed2013[:, (cityNum + 4)], Windspeed2014[:, (cityNum + 4)],
-                         Windspeed2015[:, (cityNum + 4)], Windspeed2016[:, (cityNum + 4)]]
+        ViolinDataCol = [WindspeedData[:, (cityNum + 4),0], WindspeedData[:, (cityNum + 4),1],
+                         WindspeedData[:, (cityNum + 4),2], WindspeedData[:, (cityNum + 4),3]]
         violin_parts = ax[0, 1].violinplot(ViolinDataCol, xpos, widths=0.75, showmeans=True)
         temp = 0
         for vp in violin_parts['bodies']:  # This is necessary to change the violin colours to darkmode colour scheme
@@ -411,15 +398,15 @@ class App:
         ax[0, 1].set_facecolor('#121212')
         plt.subplot(223)  # Cumulative Wind power produced per year
         plt.title('Cumulative Wind Power Produced', color='white')
-        ax[1, 0].plot(Windpower2013, color='#2CBDFE', label='2013')
-        ax[1, 0].plot(Windpower2014, color='#5986E4', label='2014')
-        ax[1, 0].plot(Windpower2015, color='#8D46C7', label='2015')
-        ax[1, 0].plot(Windpower2016, color='#B317B1', label='2016')
+        ax[1, 0].plot(Windpower[:,0], color='#2CBDFE', label='2013')
+        ax[1, 0].plot(Windpower[:,1], color='#5986E4', label='2014')
+        ax[1, 0].plot(Windpower[:,2], color='#8D46C7', label='2015')
+        ax[1, 0].plot(Windpower[:,3], color='#B317B1', label='2016')
         ax[1, 0].set_xlabel("Hours in Year", color='white')
         ax[1, 0].set_ylabel("Cumulative Wind Power Generated (MWh)", color='white')
-        plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter())
-        plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter("{x}"))
-        ax[1, 0].set_yticklabels(plt.yticks()[0].astype(int))  # Removes decimal from number
+        #plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter())
+        #plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter("{x}"))
+        #ax[1, 0].set_yticklabels(plt.yticks()[0].astype(int))  # Removes decimal from number
         ax[1, 0].grid(color='white', alpha=0.15, linestyle='--')
         plt.xticks(color='white')
         plt.yticks(color='white')
@@ -431,9 +418,9 @@ class App:
         plt.fill_between(np.arange(0, WindH2Avg.shape[0]), WindH2Avg - 2*WindH2StdDev, WindH2Avg + 2*WindH2StdDev, color="#03DAC6", alpha = 0.15) #This creates std dev
         ax[1, 1].set_xlabel("Hours in Year", color='white')
         ax[1, 1].set_ylabel("Cumulative Hydrogen Generated (tonnes)", color='white')
-        plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter())
-        plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter("{x}"))
-        ax[1, 1].set_yticklabels(plt.yticks()[0].astype(int))  # Removes decimal from number
+        #plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter())
+        #plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter("{x}"))
+        #ax[1, 1].set_yticklabels(plt.yticks()[0].astype(int))  # Removes decimal from number
         ax[1, 1].grid(color='white', alpha=0.15, linestyle='--')
         plt.xticks(color='white')
         plt.yticks(color='white')
@@ -451,24 +438,28 @@ class App:
         Efficiency = self.Efficiency/100
         PanelArea = self.Area
 
-        for i in range(1, Windspeed2016.shape[0]):  # Perform calculations for Windpower and H2 evolution
-            if i < Windspeed2013.shape[0]:  # 2016 is a leap year so need to check if loop has extended past end of other arrays
+        for i in range(1, WindspeedData.shape[0]):  # Perform calculations for Windpower and H2 evolution
+            if i < 8760:  # 2016 is a leap year so need to check if loop has extended past end of other arrays
                 #Using the Day/Hour from Windpower dataset, divide by 1000 to get kWh
                 #Convert wind speed in Kirmani 2015 weather correlation from m/s to km/hr
-                Solarpower2013[i] = Solarpower2013[i-1] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2], int(i/24)+1, Windspeed2013[i,3])/1000)*KirmaniEff(Windspeed2013[i, (cityNum + 4)]*3.6,TemperatureData[i,(cityNum + 4),0],HumidityData[i,(cityNum + 4),0])
-                Solarpower2014[i] = Solarpower2014[i-1] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, Windspeed2014[i,3])/1000)*KirmaniEff(Windspeed2014[i, (cityNum + 4)]*3.6,TemperatureData[i,(cityNum + 4),1],HumidityData[i,(cityNum + 4),1])
-                Solarpower2015[i] = Solarpower2015[i-1] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, Windspeed2015[i,3])/1000)*KirmaniEff(Windspeed2015[i, (cityNum + 4)]*3.6,TemperatureData[i,(cityNum + 4),2],HumidityData[i,(cityNum + 4),2])
-                SolarH22013[i] = SolarH22013[i - 1] + H2Prod((Solarpower2013[i] - Solarpower2013[i - 1]))
-                SolarH22014[i] = SolarH22014[i - 1] + H2Prod((Solarpower2014[i] - Solarpower2014[i - 1]))
-                SolarH22015[i] = SolarH22015[i - 1] + H2Prod((Solarpower2015[i] - Solarpower2015[i - 1]))
+                Solarpower[i,0] = Solarpower[i-1,0] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2], int(i/24)+1, WindspeedData[i,3,0])/1000)*KirmaniEff(WindspeedData[i, (cityNum + 4),0]*3.6,TemperatureData[i,(cityNum + 4),0],HumidityData[i,(cityNum + 4),0])
+                Solarpower[i,1] = Solarpower[i-1,1] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, WindspeedData[i,3,1])/1000)*KirmaniEff(WindspeedData[i, (cityNum + 4),1]*3.6,TemperatureData[i,(cityNum + 4),1],HumidityData[i,(cityNum + 4),1])
+                Solarpower[i,2] = Solarpower[i-1,2] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, WindspeedData[i,3,2])/1000)*KirmaniEff(WindspeedData[i, (cityNum + 4),2]*3.6,TemperatureData[i,(cityNum + 4),2],HumidityData[i,(cityNum + 4),2])
+                SolarH2[i,0] = SolarH2[i - 1,0] + H2Prod((Solarpower[i,0] - Solarpower[i - 1,0]))
+                SolarH2[i,1] = SolarH2[i - 1,1] + H2Prod((Solarpower[i,1] - Solarpower[i - 1,1]))
+                SolarH2[i,2] = SolarH2[i - 1,2] + H2Prod((Solarpower[i,2] - Solarpower[i - 1,2]))
                 if (i >= 4105) and (i <= 4128): #This generates the daily solar irradiance trend for summer solstice = Day 172 June 21st
-                    SolarIrradianceSolstice[i-4105] = P_solar(city_latlong.iat[cityNum, 2],172, Windspeed2015[i,3])
-                    SolarIrradianceWithWeather[i - 4105] = P_solar(city_latlong.iat[cityNum, 2], 172,Windspeed2015[i, 3])*KirmaniEff(Windspeed2016[i, (cityNum + 4)]*3.6,TemperatureData[i,(cityNum + 4),3],HumidityData[i,(cityNum + 4),3])
-            Solarpower2016[i] = Solarpower2016[i-1] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, Windspeed2016[i,3])/1000)*KirmaniEff(Windspeed2016[i, (cityNum + 4)]*3.6,TemperatureData[i,(cityNum + 4),3],HumidityData[i,(cityNum + 4),3])
-            SolarH22016[i] = SolarH22016[i - 1] + H2Prod((Solarpower2016[i] - Solarpower2016[i - 1]))
-            if i < Windspeed2013.shape[0]:
-                SolarH2Avg[i] = (SolarH22013[i] + SolarH22014[i] + SolarH22015[i] + SolarH22016[i]) / 4
-                SolarH2StdDev[i] = np.sqrt(((SolarH22013[i]-SolarH2Avg[i])**2 + (SolarH22014[i]-SolarH2Avg[i])**2 + (SolarH22015[i]-SolarH2Avg[i])**2 + (SolarH22016[i]-SolarH2Avg[i])**2) /4)
+                    SolarIrradianceSolstice[i-4105] = P_solar(city_latlong.iat[cityNum, 2],172, WindspeedData[i,3,2])
+                    SolarIrradianceWithWeather[i - 4105] = P_solar(city_latlong.iat[cityNum, 2], 172,WindspeedData[i, 3,2])*KirmaniEff(WindspeedData[i, (cityNum + 4),2]*3.6,TemperatureData[i,(cityNum + 4),3],HumidityData[i,(cityNum + 4),3])
+            else: #Need to pass non-leap year values forward to avoid graphs dropping to zero
+                Solarpower[i, 0] = Solarpower[i-1, 0]
+                Solarpower[i, 1] = Solarpower[i - 1, 1]
+                Solarpower[i, 2] = Solarpower[i - 1, 2]
+            Solarpower[i,3] = Solarpower[i-1,3] + (Efficiency*PanelArea*P_solar(city_latlong.iat[cityNum, 2],int(i/24)+1, WindspeedData[i,3,3])/1000)*KirmaniEff(WindspeedData[i, (cityNum + 4),3]*3.6,TemperatureData[i,(cityNum + 4),3],HumidityData[i,(cityNum + 4),3])
+            SolarH2[i,3] = SolarH2[i - 1,3] + H2Prod((Solarpower[i,3] - Solarpower[i - 1,3]))
+            if i < 8760:
+                SolarH2Avg[i] = (SolarH2[i,0] + SolarH2[i,1] + SolarH2[i,2] + SolarH2[i,3]) / 4
+                SolarH2StdDev[i] = np.sqrt(((SolarH2[i,0]-SolarH2Avg[i])**2 + (SolarH2[i,1]-SolarH2Avg[i])**2 + (SolarH2[i,2]-SolarH2Avg[i])**2 + (SolarH2[i,3]-SolarH2Avg[i])**2) /4)
             else:
                 SolarH2Avg[i] = SolarH2Avg[i - 1]  # Continue the last leap day
                 SolarH2StdDev[i] = SolarH2StdDev[i-1]
@@ -534,10 +525,10 @@ class App:
         plt.gca().legend(loc='upper right')
         plt.subplot(223)  # Cumulative Wind power produced per year
         plt.title('Cumulative Solar Power Produced', color='white')
-        ax[1, 0].plot(Solarpower2013, color='#2CBDFE', label='2013')
-        ax[1, 0].plot(Solarpower2014, color='#5986E4', label='2014')
-        ax[1, 0].plot(Solarpower2015, color='#8D46C7', label='2015')
-        ax[1, 0].plot(Solarpower2016, color='#B317B1', label='2016')
+        ax[1, 0].plot(Solarpower[:,0], color='#2CBDFE', label='2013')
+        ax[1, 0].plot(Solarpower[:,1], color='#5986E4', label='2014')
+        ax[1, 0].plot(Solarpower[:,2], color='#8D46C7', label='2015')
+        ax[1, 0].plot(Solarpower[:,3], color='#B317B1', label='2016')
         ax[1, 0].set_xlabel("Hours in Year", color='white')
         ax[1, 0].set_ylabel("Cumulative Wind Power Generated (MWh)", color='white')
         #plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter())
